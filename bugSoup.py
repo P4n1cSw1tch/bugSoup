@@ -29,15 +29,20 @@ def main():
         os.makedirs(projName)
     os.chdir(projName)
 
-    amass()
+    domainEnum()
 
     sprint("\n")
 
     return
 
-def amass():
+
+def domainEnum():
     import subprocess
     import os
+
+    if not(os.path.exists("amass")):
+        os.makedirs("amass")
+        os.chdir("amass")
 
     domains = []
     while True:
@@ -49,7 +54,8 @@ def amass():
             domains.append(domainInput)
         else:
             break
-
+    
+    domainList = []
     for domain in domains:
         if not(os.path.exists(domain)):
             os.makedirs(domain)
@@ -58,7 +64,21 @@ def amass():
         print(pStatus("GOOD") + "Enmurating Domain: " + domain)
         subprocess.run(["amass", "enum", "-src", "-ip", "-brute", "-d", domain])
         subprocess.run(["amass", "viz", "-d3", "-d", domain])
+        subprocess.run(["amass", "db", "-json", "domains.json", "-d", domain])
+        os.system("cat domains.json | jq -r '[.domains[].names[] | {name: .name, num: .sources | length}] | sort_by(.num) | reverse | .[].name' > domains.txt")
 
+        with open('domains.txt', 'r') as reader:
+            domainList.append(reader.read().split("\n"))
+        
+        #Go Back One Directory
+        os.path.normpath(os.getcwd() + os.sep + os.pardir)
+
+    while("" in domainList) :
+        domainList.remove("")
+
+
+    print("\n\n")
+    print(domainList)
 
     return
 
