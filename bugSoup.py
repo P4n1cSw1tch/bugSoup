@@ -30,6 +30,7 @@ def main():
     os.chdir(projName)
 
     domainEnum()
+    flyOver()
 
     sprint("\n")
 
@@ -39,10 +40,11 @@ def main():
 def domainEnum():
     import subprocess
     import os
+    import json
 
-    if not(os.path.exists("amass")):
-        os.makedirs("amass")
-        os.chdir("amass")
+    if not(os.path.exists("DomainEnum")):
+        os.makedirs("DomainEnum")
+        os.chdir("DomainEnum")
 
     domains = []
     while True:
@@ -60,25 +62,54 @@ def domainEnum():
         if not(os.path.exists(domain)):
             os.makedirs(domain)
         os.chdir(domain)
-        
-        print(pStatus("GOOD") + "Enmurating Domain: " + domain)
+
+        print(pStatus("GOOD") + "Amass Enmurating Domain: " + domain)
         subprocess.run(["amass", "enum", "-src", "-ip", "-brute", "-d", domain])
         subprocess.run(["amass", "viz", "-d3", "-d", domain])
         subprocess.run(["amass", "db", "-json", "domains.json", "-d", domain])
         os.system("cat domains.json | jq -r '[.domains[].names[] | {name: .name, num: .sources | length}] | sort_by(.num) | reverse | .[].name' > domains.txt")
-
+        
         with open('domains.txt', 'r') as reader:
-            domainList.append(reader.read().split("\n"))
+            curDomainList = reader.read().split("\n")
+        
+        for curDomain in curDomainList:
+            domainList.append(curDomain)
+        
+        print(pStatus("GOOD") + "Pulling Domains From BufferOver: " + domain)
+        os.system("curl https://dns.bufferover.run/dns?q=." + domain + " > bufferOverDomains.json")
+        
+        with open('bufferOverDomains.json') as f:
+            bufferOverDomains = json.load(f)
+
+        #Get RDNS Later
+        if bufferOverDomains["FDNS_A"] is not None:
+            for curDomain in bufferOverDomains["FDNS_A"]:
+                domainList.append(curDomain.split(",")[1])
+
+        while("" in domainList) :
+            domainList.remove("")
         
         #Go Back One Directory
-        os.path.normpath(os.getcwd() + os.sep + os.pardir)
+        os.chdir('..')
 
-    while("" in domainList) :
-        domainList.remove("")
+    domainListUniq = list(set(domainList))
+    
+    textfile = open("domainsFinal.txt", "w")
+    for curDomainFinal in domainListUniq:
+        textfile.write(curDomainFinal + "\n")
+
+    os.chdir('..')
+
+    return
 
 
-    print("\n\n")
-    print(domainList)
+def flyOver():
+    import os
+
+    if not(os.path.exists("flyover")):
+        os.makedirs("flyover")
+
+    os.system("cat DomainEnum/domainsFinal.txt | aquatone -http-timeout 9000 -scan-timeout 200 -screenshot-timeout 60000 -threads 2 -out flyover/")
 
     return
 
