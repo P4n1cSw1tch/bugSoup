@@ -38,6 +38,7 @@ def main():
 
 
 def domainEnum():
+    import time
     import subprocess
     import os
     import json
@@ -59,12 +60,13 @@ def domainEnum():
     
     domainList = []
     for domain in domains:
+        time.sleep(30)
         if not(os.path.exists(domain)):
             os.makedirs(domain)
         os.chdir(domain)
 
         print(pStatus("GOOD") + "Amass Enmurating Domain: " + domain)
-        subprocess.run(["amass", "enum", "-src", "-ip", "-brute", "-d", domain])
+        subprocess.run(["amass", "enum", "-src", "-ip", "-active", "-max-depth", "3", "-brute", "-d", domain])
         subprocess.run(["amass", "viz", "-d3", "-d", domain])
         subprocess.run(["amass", "db", "-json", "domains.json", "-d", domain])
         os.system("cat domains.json | jq -r '[.domains[].names[] | {name: .name, num: .sources | length}] | sort_by(.num) | reverse | .[].name' > domains.txt")
@@ -76,15 +78,15 @@ def domainEnum():
             domainList.append(curDomain)
         
         print(pStatus("GOOD") + "Pulling Domains From BufferOver: " + domain)
-        os.system("curl https://dns.bufferover.run/dns?q=." + domain + " > bufferOverDomains.json")
+       # os.system("curl https://dns.bufferover.run/dns?q=." + domain + " > bufferOverDomains.json")
         
-        with open('bufferOverDomains.json') as f:
-            bufferOverDomains = json.load(f)
+        #with open('bufferOverDomains.json') as f:
+         #   bufferOverDomains = json.load(f)
 
         #Get RDNS Later
-        if bufferOverDomains["FDNS_A"] is not None:
-            for curDomain in bufferOverDomains["FDNS_A"]:
-                domainList.append(curDomain.split(",")[1])
+       # if bufferOverDomains["FDNS_A"] is not None:
+        #    for curDomain in bufferOverDomains["FDNS_A"]:
+         #       domainList.append(curDomain.split(",")[1])
 
         while("" in domainList) :
             domainList.remove("")
@@ -112,6 +114,91 @@ def flyOver():
     os.system("cat DomainEnum/domainsFinal.txt | aquatone -http-timeout 9000 -scan-timeout 200 -screenshot-timeout 60000 -threads 2 -out flyover/")
 
     return
+
+
+def takeOver():
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+
+    if not(os.path.exists("takeover")):
+        os.makedirs("takeover")
+
+    #REMOVE LATER 
+    os.chdir("hy-veeVDP")
+
+    with open('DomainEnum/domainsFinal.txt', 'r') as reader:
+        domainList = reader.read().split("\n")
+
+    resolvedDict = []
+    for domain in domainList:
+        resolvedDict.append({
+                            'domain' : domain,
+                            'CNAME'  : None,
+                            })
+
+    with ThreadPoolExecutor(max_workers = 100) as executor:
+        results = executor.map(getCNAME, domainList)
+
+    
+    CNAMES = []
+    for result in results:
+        CNAMES.append(result)
+    
+    i = 0
+    while i < len(CNAMES):
+        resolvedDict[i]["CNAME"] = CNAMES[i]
+        i += 1
+
+    finalCNAMES = []
+    crossDomainCNAMES = []
+
+    for pair in resolvedDict:
+        if (pair["CNAME"] != False):
+            finalCNAMES.append(pair)
+            if not(pair["CNAME"].split('.')[-2] == pair["domain"].split('.')[-2] and pair["CNAME"].split('.')[-1] == pair["domain"].split('.')[-1]):
+                crossDomainCNAMES.append(pair)
+
+
+    print("\nCNAMES:")
+    for name in finalCNAMES:
+        print(name)
+
+
+    print("\nCROSS-DOMAIN CNAMES:")
+    for name in crossDomainCNAMES:
+        print(name)
+
+
+    return
+
+
+def getCNAME(domain):
+    import dns.resolver
+    import time
+
+    time.sleep(1)
+
+    my_resolver = dns.resolver.Resolver()
+    my_resolver.nameservers = ['8.8.8.8', '9.9.9.9', '208.67.222.222', '1.1.1.1', '185.228.168.9', '76.76.19.19', '94.140.14.14', '4.0.0.53']
+
+    try:
+        answers = my_resolver.resolve(domain, 'CNAME')
+        for data in answers:
+            answer = str(data)
+    except dns.resolver.NoAnswer:
+        print("No CNAME For:", domain)
+        return False
+    except dns.resolver.NXDOMAIN:
+        print("No CNAME For:", domain)
+        return False
+
+    if answer[-1] == ".":
+        answer = answer[:-1]
+    print("Resolved:", domain, "-->:", answer)
+
+    return answer
+
+    
 
 
 # This Function Prints ASCCI Art Banner For Style
@@ -203,4 +290,4 @@ def pStatus(status):
 
 # This Calls The Main Function.
 if __name__ == "__main__":
-    main()
+    takeOver()
