@@ -27,25 +27,27 @@ def main():
 
     if not(os.path.exists(projName)):
         os.makedirs(projName)
-    os.chdir(projName)
 
-    domainEnum()
-    flyOver()
+    #domainEnum(projName)
+    #flyOver(projName)
+    takeOver(projName)
 
     sprint("\n")
 
     return
 
 
-def domainEnum():
+def domainEnum(projName):
     import time
     import subprocess
     import os
     import json
 
-    if not(os.path.exists("DomainEnum")):
-        os.makedirs("DomainEnum")
-        os.chdir("DomainEnum")
+    workingPath = projNam + "/DomainEnum"
+
+    if not(os.path.exists(workingPath)):
+        os.makedirs(workingPath)
+        os.chdir(workingPath)
 
     domains = []
     while True:
@@ -105,27 +107,31 @@ def domainEnum():
     return
 
 
-def flyOver():
-    import os
+def flyOver(projName):
+    from os import system
 
-    if not(os.path.exists("flyover")):
-        os.makedirs("flyover")
+    workingPath = projName + "/flyover"
+    if not(os.path.exists(workingPath)):
+        os.makedirs(workingPath)
 
-    os.system("cat DomainEnum/domainsFinal.txt | aquatone -http-timeout 9000 -scan-timeout 200 -screenshot-timeout 60000 -threads 2 -out flyover/")
+    domainList = projName + "/DomainEnum/domainsFinal.txt"
+
+    system("cat " + domainList + " | aquatone -http-timeout 9000 -scan-timeout 200 -screenshot-timeout 60000 -threads 2 -out " + workingPath)
 
     return
 
 
-def takeOver():
+def takeOver(projName):
     import os
     from concurrent.futures import ThreadPoolExecutor
+    import json
+
+    #REMOVE LATER 
+    os.chdir(projName)
 
     if not(os.path.exists("takeover")):
         os.makedirs("takeover")
-
-    #REMOVE LATER 
-    os.chdir("hy-veeVDP")
-
+ 
     with open('DomainEnum/domainsFinal.txt', 'r') as reader:
         domainList = reader.read().split("\n")
 
@@ -168,6 +174,13 @@ def takeOver():
     for name in crossDomainCNAMES:
         print(name)
 
+    json_object = json.dumps(finalCNAMES, indent = 4)
+    with open("takeover/CNAMES.json", "w") as outfile:
+        outfile.write(json_object)
+
+    json_object = json.dumps(crossDomainCNAMES, indent = 4)
+    with open("takeover/takeovers.json", "w") as outfile:
+        outfile.write(json_object)
 
     return
 
@@ -290,4 +303,4 @@ def pStatus(status):
 
 # This Calls The Main Function.
 if __name__ == "__main__":
-    takeOver()
+    main()
