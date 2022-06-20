@@ -18,18 +18,19 @@ def main():
 
     banner()  # Prints ASCCI Art Banner For Style
     checkLinux()  # Check This Is A Linux Operating System
-    checkPriv()  # Check For Root Privleges
+    #checkPriv()  # Check For Root Privleges
     
-    #Get Domain Name File
+    #Get Project Name
     sprint(pStatus("INPUT") + "Project Name: ")
     projName = input()
     sprint(pStatus("UP"))
 
+    #Create Project Directory If Doesn't Exist
     if not(os.path.exists(projName)):
         os.makedirs(projName)
 
-    #domainEnum(projName)
-    #flyOver(projName)
+    domainEnum(projName)
+    flyOver(projName)
     takeOver(projName)
 
     sprint("\n")
@@ -43,11 +44,10 @@ def domainEnum(projName):
     import os
     import json
 
-    workingPath = projNam + "/DomainEnum"
+    workingPath = projName + "/DomainEnum"+ "/"
 
     if not(os.path.exists(workingPath)):
         os.makedirs(workingPath)
-        os.chdir(workingPath)
 
     domains = []
     while True:
@@ -62,53 +62,52 @@ def domainEnum(projName):
     
     domainList = []
     for domain in domains:
-        time.sleep(30)
-        if not(os.path.exists(domain)):
-            os.makedirs(domain)
-        os.chdir(domain)
+        time.sleep(60)
+        domainPath = workingPath + domain + "/"
+
+        if not(os.path.exists(domainPath)):
+            os.makedirs(domainPath)
 
         print(pStatus("GOOD") + "Amass Enmurating Domain: " + domain)
         subprocess.run(["amass", "enum", "-src", "-ip", "-active", "-max-depth", "3", "-brute", "-d", domain])
-        subprocess.run(["amass", "viz", "-d3", "-d", domain])
-        subprocess.run(["amass", "db", "-json", "domains.json", "-d", domain])
-        os.system("cat domains.json | jq -r '[.domains[].names[] | {name: .name, num: .sources | length}] | sort_by(.num) | reverse | .[].name' > domains.txt")
+        subprocess.run(["amass", "viz", "-d3", "-o", domainPath, "-d", domain])
+        subprocess.run(["amass", "db", "-json", domainPath + "domains.json", "-d", domain])
+        os.system("cat " + domainPath + "domains.json | jq -r '[.domains[].names[] | {name: .name, num: .sources | length}] | sort_by(.num) | reverse | .[].name' > " +  domainPath + "domains.txt")
         
-        with open('domains.txt', 'r') as reader:
+        with open(domainPath + "domains.txt", 'r') as reader:
             curDomainList = reader.read().split("\n")
         
         for curDomain in curDomainList:
             domainList.append(curDomain)
         
-        print(pStatus("GOOD") + "Pulling Domains From BufferOver: " + domain)
-       # os.system("curl https://dns.bufferover.run/dns?q=." + domain + " > bufferOverDomains.json")
         
-        #with open('bufferOverDomains.json') as f:
-         #   bufferOverDomains = json.load(f)
+        ''' Bufferover Run Currently Not Working
+        print(pStatus("GOOD") + "Pulling Domains From BufferOver: " + domain)
+        os.system("curl https://dns.bufferover.run/dns?q=." + domain + " > " + domainPath + "bufferOverDomains.json")
+        
+        with open(domainPath + "bufferOverDomains.json") as f:
+            bufferOverDomains = json.load(f)
 
         #Get RDNS Later
-       # if bufferOverDomains["FDNS_A"] is not None:
-        #    for curDomain in bufferOverDomains["FDNS_A"]:
-         #       domainList.append(curDomain.split(",")[1])
+        if bufferOverDomains["FDNS_A"] is not None:
+            for curDomain in bufferOverDomains["FDNS_A"]:
+                domainList.append(curDomain.split(",")[1])
+        '''
 
         while("" in domainList) :
             domainList.remove("")
-        
-        #Go Back One Directory
-        os.chdir('..')
 
     domainListUniq = list(set(domainList))
     
-    textfile = open("domainsFinal.txt", "w")
+    textfile = open(workingPath + "domainsFinal.txt", "w")
     for curDomainFinal in domainListUniq:
         textfile.write(curDomainFinal + "\n")
-
-    os.chdir('..')
 
     return
 
 
 def flyOver(projName):
-    from os import system
+    import os
 
     workingPath = projName + "/flyover"
     if not(os.path.exists(workingPath)):
@@ -116,7 +115,7 @@ def flyOver(projName):
 
     domainList = projName + "/DomainEnum/domainsFinal.txt"
 
-    system("cat " + domainList + " | aquatone -http-timeout 9000 -scan-timeout 200 -screenshot-timeout 60000 -threads 2 -out " + workingPath)
+    os.system("cat " + domainList + " | aquatone -http-timeout 9000 -scan-timeout 200 -screenshot-timeout 60000 -threads 2 -out " + workingPath)
 
     return
 
@@ -126,13 +125,12 @@ def takeOver(projName):
     from concurrent.futures import ThreadPoolExecutor
     import json
 
-    #REMOVE LATER 
-    os.chdir(projName)
+    workingPath = projName + "/takeover/"
 
-    if not(os.path.exists("takeover")):
-        os.makedirs("takeover")
+    if not(os.path.exists(workingPath)):
+        os.makedirs(workingPath)
  
-    with open('DomainEnum/domainsFinal.txt', 'r') as reader:
+    with open(projName + '/DomainEnum/domainsFinal.txt', 'r') as reader:
         domainList = reader.read().split("\n")
 
     resolvedDict = []
@@ -175,11 +173,11 @@ def takeOver(projName):
         print(name)
 
     json_object = json.dumps(finalCNAMES, indent = 4)
-    with open("takeover/CNAMES.json", "w") as outfile:
+    with open(workingPath + "CNAMES.json", "w") as outfile:
         outfile.write(json_object)
 
     json_object = json.dumps(crossDomainCNAMES, indent = 4)
-    with open("takeover/takeovers.json", "w") as outfile:
+    with open(workingPath + "takeovers.json", "w") as outfile:
         outfile.write(json_object)
 
     return
