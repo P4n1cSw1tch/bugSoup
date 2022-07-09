@@ -8,7 +8,7 @@ from sys import stdout
 
 
 # Global Variables
-VERSION = "0.01"
+VERSION = "0.02"
 sprint = stdout.write
 
 
@@ -53,12 +53,14 @@ def domainEnum(projName):
     while True:
         sprint(pStatus("INPUT") + "Enter Domain: ")
         domainInput = input()
-        sprint(pStatus("UP"))
+        sprint(pStatus("UP") + pStatus("UP"))
 
-        if domainInput != "exit":
-            domains.append(domainInput)
-        else:
+        if domainInput == "exit":
             break
+        elif domainInput == "":
+            pass
+        else:
+            domains.append(domainInput)
     
     domainList = []
     for domain in domains:
