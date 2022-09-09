@@ -3,153 +3,257 @@
 # Author: Github: sonicCrypt0r (https://github.com/sonicCrypt0r)
 
 
-# Global Imports
-from sys import stdout
+# Global variables
+VERSION = "0.03"
 
 
-# Global Variables
-VERSION = "0.02"
-sprint = stdout.write
-
-
-# Establishes General Flow Of The Program.
+# This function establishes the general flow of the program
 def main():
-    import os 
+    from os import makedirs
+    from os import path
+    from os import chdir
 
     banner()  # Prints ASCCI Art Banner For Style
     checkLinux()  # Check This Is A Linux Operating System
-    #checkPriv()  # Check For Root Privleges
-    
-    #Get Project Name
-    sprint(pStatus("INPUT") + "Project Name: ")
+    # checkPriv()  # Check For Root Privleges
+
+    # Get project name
+    print(pStatus("INPUT") + "Project Name: ", end="")
     projName = input()
-    sprint(pStatus("UP"))
 
-    #Create Project Directory If Doesn't Exist
-    if not(os.path.exists(projName)):
-        os.makedirs(projName)
+    # Create project directory if doesn't exist
+    if not (path.exists(projName)):
+        makedirs(projName)
 
-    domainEnum(projName)
-    flyOver(projName)
-    takeOver(projName)
+    # Change directory to project
+    chdir(projName)
 
-    sprint("\n")
+    getRootDomains()  # Get root domain names from the user
+    domainEnum()  # Perform sub domain enumartion with Amass
+    flyOver()  # Perform a sub domain screenshot flyover with Aquatone
+    takeOver()  # search for CNAME records for possible takeovers
 
     return
 
 
-def domainEnum(projName):
-    import time
-    import subprocess
-    import os
-    import json
+# This function gets root domain names from the user
+def getRootDomains():
+    from os import makedirs
+    from os import path
+    from os import getcwd
 
-    workingPath = projName + "/DomainEnum"+ "/"
-
-    if not(os.path.exists(workingPath)):
-        os.makedirs(workingPath)
+    # Create working path if doesn't exist
+    workingPath = getcwd() + "/Domain_Enum/"
+    if not (path.exists(workingPath)):
+        makedirs(workingPath)
 
     domains = []
     while True:
-        sprint(pStatus("INPUT") + "Enter Domain: ")
+        print(pStatus("INPUT") + "Enter Domain: ", end="")
         domainInput = input()
-        sprint(pStatus("UP") + pStatus("UP"))
 
         if domainInput == "exit":
+            print("")
             break
         elif domainInput == "":
             pass
-        else:
+        elif domainInput not in domains:
             domains.append(domainInput)
-    
+
+    with open("scope.txt", "w") as f:
+        f.write("\n".join(domains))
+
+    return
+
+
+# This function performs sub domain enumartion with Amass
+def domainEnum():
+    from time import sleep
+    from shutil import rmtree
+    from os import getcwd
+    from os import system
+    import os
+    import json
+
+    # Settings
+    RECURSION_DEPTH = 5
+    ACTIVE_MODE = True
+    MAX_RETRY = 4
+    CUSTOM_WORD_LIST = True
+    CUSTOM_WORD_LIST_PATH = (
+        "/usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt"
+    )
+
+    # Create working path if doesn't exist
+    workingPath = getcwd() + "/Domain_Enum/"
+    if not (os.path.exists(workingPath)):
+        os.makedirs(workingPath)
+
+    with open("scope.txt") as f:
+        rootDomainsRough = f.readlines()
+        rootDomainsRough = list(set(rootDomainsRough))
+        rootDomains = []
+        for domain in rootDomainsRough:
+            rootDomains.append(domain.strip())
+
+    i = 0
     domainList = []
-    for domain in domains:
-        time.sleep(60)
+    retry = 0
+
+    while i < len(rootDomains):
+        domain = rootDomains[i]
         domainPath = workingPath + domain + "/"
 
-        if not(os.path.exists(domainPath)):
+        if not (os.path.exists(domainPath)):
             os.makedirs(domainPath)
 
+        # Amass Enmurate
         print(pStatus("GOOD") + "Amass Enmurating Domain: " + domain)
-        subprocess.run(["amass", "enum", "-src", "-ip", "-active", "-max-depth", "3", "-brute", "-d", domain])
-        subprocess.run(["amass", "viz", "-d3", "-o", domainPath, "-d", domain])
-        subprocess.run(["amass", "db", "-json", domainPath + "domains.json", "-d", domain])
-        os.system("cat " + domainPath + "domains.json | jq -r '[.domains[].names[] | {name: .name, num: .sources | length}] | sort_by(.num) | reverse | .[].name' > " +  domainPath + "domains.txt")
-        
-        with open(domainPath + "domains.txt", 'r') as reader:
-            curDomainList = reader.read().split("\n")
-        
-        for curDomain in curDomainList:
-            domainList.append(curDomain)
-        
-        
-        ''' Bufferover Run Currently Not Working
-        print(pStatus("GOOD") + "Pulling Domains From BufferOver: " + domain)
-        os.system("curl https://dns.bufferover.run/dns?q=." + domain + " > " + domainPath + "bufferOverDomains.json")
-        
-        with open(domainPath + "bufferOverDomains.json") as f:
-            bufferOverDomains = json.load(f)
 
-        #Get RDNS Later
-        if bufferOverDomains["FDNS_A"] is not None:
-            for curDomain in bufferOverDomains["FDNS_A"]:
-                domainList.append(curDomain.split(",")[1])
-        '''
+        cmd = (
+            "amass enum -src -ip -brute -max-depth "
+            + str(RECURSION_DEPTH)
+            + " -d "
+            + domain
+        )
+        if ACTIVE_MODE:  # If active mode
+            cmd += " -active"
+        if CUSTOM_WORD_LIST:  # If custom wordlist
+            cmd += " -w " + CUSTOM_WORD_LIST_PATH
+        system(cmd)
 
-        while("" in domainList) :
-            domainList.remove("")
+        print(pStatus("GOOD") + "Amass Creating HTML File...")
+        system(
+            "amass viz -d3 -o " + domainPath + " -d " + domain
+        )  # Create HTML visualizer
 
+        """ Not Working
+        print(pStatus("GOOD") + "Amass Creating JSON File...")
+        system("amass db -names -silent -json " + domainPath + "domains.json" + " -d " + domain) #Create JSON File
+        """
+
+        print(pStatus("GOOD") + "Amass Creating TXT File...")
+        system(
+            "amass db -names -silent -o " + domainPath + "domains.txt" + " -d " + domain
+        )  # Create TXT File
+
+        # Read domains from current enmuration to curDomainList
+        try:
+            with open(domainPath + "domains.txt", "r") as f:
+                curDomainListRough = f.readlines()
+                curDomainListRough = list(set(curDomainListRough))
+                curDomainList = []
+                for domain in curDomainListRough:
+                    curDomainList.append(domain.strip())
+
+            with open(domainPath + "domains.txt", "w") as f:
+                f.write("\n".join(curDomainList))
+
+        except:
+            print("ERROR")
+            curDomainList = ""
+
+        # If Amass was successful or max retries has been hit
+        if curDomainList or MAX_RETRY > 4:
+            if retry > 4:
+                retry = 0
+            i += 1
+
+        # If Amass was not successful and retries < max retries
+        else:
+            print(
+                pStatus("BAD") + "Amass Failed To Enmurate:",
+                domain,
+                "Retries:",
+                retry + 1,
+            )
+            retry += 1
+            rmtree(domainPath)
+            sleep(60)
+
+    domainList.extend(curDomainList)
     domainListUniq = list(set(domainList))
-    
-    textfile = open(workingPath + "domainsFinal.txt", "w")
+
+    textfile = open(workingPath + "Domains_Final.txt", "w")
     for curDomainFinal in domainListUniq:
         textfile.write(curDomainFinal + "\n")
 
     return
 
 
-def flyOver(projName):
-    import os
+# This function performs a sub domain screenshot flyover with Aquatone
+def flyOver():
+    from os import path
+    from os import makedirs
+    from os import system
+    from os import getcwd
 
-    workingPath = projName + "/flyover"
-    if not(os.path.exists(workingPath)):
-        os.makedirs(workingPath)
+    # Settings
+    THREADS = 2
+    SCREENSHOT_TIMEOUT = 60000
+    SCAN_TIMEOUT = 200
+    HTTP_TIMEOUT = 9000
 
-    domainList = projName + "/DomainEnum/domainsFinal.txt"
+    # Create working path if doesn't exist
+    workingPath = getcwd() + "/Fly_Over/"
+    if not (path.exists(workingPath)):
+        makedirs(workingPath)
 
-    os.system("cat " + domainList + " | aquatone -http-timeout 9000 -scan-timeout 200 -screenshot-timeout 60000 -threads 2 -out " + workingPath)
+    # Location of domain list of previous domain enumertion
+    domainList = "Domain_Enum/" + "Domains_Final.txt"
+
+    system(
+        "cat "
+        + domainList
+        + " | aquatone -http-timeout "
+        + str(HTTP_TIMEOUT)
+        + " -scan-timeout "
+        + str(SCAN_TIMEOUT)
+        + " -screenshot-timeout "
+        + str(SCREENSHOT_TIMEOUT)
+        + " -threads "
+        + str(THREADS)
+        + " -out "
+        + workingPath
+    )
 
     return
 
 
-def takeOver(projName):
-    import os
+# This function searchs for CNAME records for possible takeovers
+def takeOver():
+    from os import getcwd
     from concurrent.futures import ThreadPoolExecutor
     import json
 
-    workingPath = projName + "/takeover/"
+    # Settings
+    MAX_THREADS = 100  # Max threads for resolving DNS records
 
-    if not(os.path.exists(workingPath)):
+    # Create working path if doesn't exist
+    workingPath = getcwd() + "/Take_Over/"
+    if not (os.path.exists(workingPath)):
         os.makedirs(workingPath)
- 
-    with open(projName + '/DomainEnum/domainsFinal.txt', 'r') as reader:
+
+    # Read sub domains from previous enumeration into a list
+    with open("Domain_Enum/Domains_Final.txt", "r") as reader:
         domainList = reader.read().split("\n")
 
     resolvedDict = []
     for domain in domainList:
-        resolvedDict.append({
-                            'domain' : domain,
-                            'CNAME'  : None,
-                            })
+        resolvedDict.append(
+            {
+                "domain": domain,
+                "CNAME": None,
+            }
+        )
 
-    with ThreadPoolExecutor(max_workers = 100) as executor:
+    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         results = executor.map(getCNAME, domainList)
 
-    
     CNAMES = []
     for result in results:
         CNAMES.append(result)
-    
+
     i = 0
     while i < len(CNAMES):
         resolvedDict[i]["CNAME"] = CNAMES[i]
@@ -159,43 +263,55 @@ def takeOver(projName):
     crossDomainCNAMES = []
 
     for pair in resolvedDict:
-        if (pair["CNAME"] != False):
+        if pair["CNAME"] != False:
             finalCNAMES.append(pair)
-            if not(pair["CNAME"].split('.')[-2] == pair["domain"].split('.')[-2] and pair["CNAME"].split('.')[-1] == pair["domain"].split('.')[-1]):
+            if not (
+                pair["CNAME"].split(".")[-2] == pair["domain"].split(".")[-2]
+                and pair["CNAME"].split(".")[-1] == pair["domain"].split(".")[-1]
+            ):
                 crossDomainCNAMES.append(pair)
-
 
     print("\nCNAMES:")
     for name in finalCNAMES:
         print(name)
 
-
     print("\nCROSS-DOMAIN CNAMES:")
     for name in crossDomainCNAMES:
         print(name)
 
-    json_object = json.dumps(finalCNAMES, indent = 4)
+    json_object = json.dumps(finalCNAMES, indent=4)
     with open(workingPath + "CNAMES.json", "w") as outfile:
         outfile.write(json_object)
 
-    json_object = json.dumps(crossDomainCNAMES, indent = 4)
+    json_object = json.dumps(crossDomainCNAMES, indent=4)
     with open(workingPath + "takeovers.json", "w") as outfile:
         outfile.write(json_object)
 
     return
 
 
+# This funtion takes a subdomain and checks for a CNAME record
 def getCNAME(domain):
     import dns.resolver
-    import time
+    from time import sleep
 
-    time.sleep(1)
+    # Settings
+    RESOLVER_LIST = [
+        "8.8.8.8",
+        "9.9.9.9",
+        "208.67.222.222",
+        "1.1.1.1",
+        "185.228.168.9",
+        "76.76.19.19",
+        "94.140.14.14",
+        "4.0.0.53",
+    ]  # List of domain resolvers IPs
 
     my_resolver = dns.resolver.Resolver()
-    my_resolver.nameservers = ['8.8.8.8', '9.9.9.9', '208.67.222.222', '1.1.1.1', '185.228.168.9', '76.76.19.19', '94.140.14.14', '4.0.0.53']
+    my_resolver.nameservers = RESOLVER_LIST
 
     try:
-        answers = my_resolver.resolve(domain, 'CNAME')
+        answers = my_resolver.resolve(domain, "CNAME")
         for data in answers:
             answer = str(data)
     except dns.resolver.NoAnswer:
@@ -211,10 +327,8 @@ def getCNAME(domain):
 
     return answer
 
-    
 
-
-# This Function Prints ASCCI Art Banner For Style
+# This function prints banner art for sweet style
 def banner():
     banner = r"""                                                                           
  ______            _______    _______  _______           _______ 
@@ -233,42 +347,44 @@ def banner():
     return
 
 
+# This function makes sure it is running on a Linux operating system
 def checkLinux():
     from platform import system
 
+    # If the OS is not Linux exit the program
     os = system()
-
     if os != "Linux":
-        sprint(pStatus("BAD") + "Operating System Is Not Linux Value: " + os + "\n")
+        print(pStatus("BAD") + "Operating System Is Not Linux Value: " + os)
         exit(1)  # Exit With Error Code
 
-    sprint(pStatus("GOOD") + "Operating System Is Linux Value: " + os)
+    print(pStatus("GOOD") + "Operating System Is Linux Value: " + os)
 
     return
 
 
+# This function checks if the script has root privleges
 def checkPriv():
     from os import geteuid
 
     euid = geteuid()
 
+    # If the effective user ID is not 0 (not root)
     if euid != 0:
-        sprint(
+        print(
             pStatus("BAD")
             + "This Script Does Not Have Root Privledges EUID: "
             + str(euid)
-            + "\n"
         )
         exit(1)  # Exit With Error Code
 
-    sprint(pStatus("GOOD") + "This Script Has Root Privledges EUID: " + str(euid))
+    print(pStatus("GOOD") + "This Script Has Root Privledges EUID: " + str(euid))
 
     return
 
 
-# This Function Is For Fancy Output Throughout The Program
+# This function is for fancy output throughout the program
 def pStatus(status):
-    # Colors Used For Fancy Output
+    # Colors used for fancy output
     COLORS = {
         "WARN": "\033[93m",  # Yellow
         "GOOD": "\033[92m",  # Green
@@ -278,29 +394,21 @@ def pStatus(status):
         "UP": "\033[F",  # This Goes Up A Line
     }
 
-    # Select Color/Prefix Based On "status"
+    # Select color/prefix based on status
     if status == "GOOD":
-        prefix = (
-            "\n" + COLORS["ENDC"] + "[" + COLORS["GOOD"] + "+" + COLORS["ENDC"] + "] "
-        )
+        prefix = COLORS["ENDC"] + "[" + COLORS["GOOD"] + "+" + COLORS["ENDC"] + "] "
     elif status == "BAD":
-        prefix = (
-            "\n" + COLORS["ENDC"] + "[" + COLORS["BAD"] + "+" + COLORS["ENDC"] + "] "
-        )
+        prefix = COLORS["ENDC"] + "[" + COLORS["BAD"] + "+" + COLORS["ENDC"] + "] "
     elif status == "WARN":
-        prefix = (
-            "\n" + COLORS["ENDC"] + "[" + COLORS["WARN"] + "+" + COLORS["ENDC"] + "] "
-        )
+        prefix = COLORS["ENDC"] + "[" + COLORS["WARN"] + "+" + COLORS["ENDC"] + "] "
     elif status == "INPUT":
-        prefix = (
-            "\n" + COLORS["ENDC"] + "[" + COLORS["INPUT"] + "+" + COLORS["ENDC"] + "] "
-        )
+        prefix = COLORS["ENDC"] + "[" + COLORS["INPUT"] + "+" + COLORS["ENDC"] + "] "
     elif status == "UP":
         prefix = COLORS["UP"]
 
     return prefix
 
 
-# This Calls The Main Function.
+# call the main function if not an import
 if __name__ == "__main__":
     main()
