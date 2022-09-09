@@ -32,6 +32,7 @@ def main():
     domainEnum()  # Perform sub domain enumartion with Amass
     flyOver()  # Perform a sub domain screenshot flyover with Aquatone
     takeOver()  # search for CNAME records for possible takeovers
+    quickScan()
 
     return
 
@@ -81,7 +82,7 @@ def domainEnum():
     MAX_RETRY = 4
     CUSTOM_WORD_LIST = True
     CUSTOM_WORD_LIST_PATH = (
-        "/usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt"
+        "/usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt"
     )
 
     # Create working path if doesn't exist
@@ -326,6 +327,28 @@ def getCNAME(domain):
     print("Resolved:", domain, "-->:", answer)
 
     return answer
+
+
+# This function uses RustScan to TCP scan all ports on every subdomain
+def quickScan():
+    from os import getcwd
+    from os import system
+
+    # Settings
+    MAX_THREADS = 100  # Max threads for resolving DNS records
+
+    # Create working path if doesn't exist
+    workingPath = getcwd() + "/Quick_Scan/"
+    if not (os.path.exists(workingPath)):
+        os.makedirs(workingPath)
+
+    # Location of domain list of previous domain enumertion
+    domainList = "Domain_Enum/" + "Domains_Final.txt"
+
+    cmd = '''rustscan -a '$FILE' --scan-order "Random" '''
+    cmd = cmd.replace("$FILE", domainList)
+    os.system(cmd)
+
 
 
 # This function prints banner art for sweet style
