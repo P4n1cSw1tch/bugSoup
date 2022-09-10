@@ -16,8 +16,10 @@ def main():
     banner()  # Prints ASCCI Art Banner For Style
     checkLinux()  # Check This Is A Linux Operating System
     # checkPriv()  # Check For Root Privleges
+    print("")
 
     # Get project name
+    printLine()
     print(pStatus("INPUT") + "Project Name: ", end="")
     projName = input()
 
@@ -32,7 +34,7 @@ def main():
     domainEnum()  # Perform sub domain enumartion with Amass
     flyOver()  # Perform a sub domain screenshot flyover with Aquatone
     takeOver()  # search for CNAME records for possible takeovers
-    quickScan()
+    quickScan()  # use RustScan to TCP scan all ports on every subdomain
 
     return
 
@@ -73,7 +75,8 @@ def domainEnum():
     from shutil import rmtree
     from os import getcwd
     from os import system
-    import os
+    from os import makedirs
+    from os import path
     import json
 
     # Settings
@@ -87,8 +90,8 @@ def domainEnum():
 
     # Create working path if doesn't exist
     workingPath = getcwd() + "/Domain_Enum/"
-    if not (os.path.exists(workingPath)):
-        os.makedirs(workingPath)
+    if not (path.exists(workingPath)):
+        makedirs(workingPath)
 
     with open("scope.txt") as f:
         rootDomainsRough = f.readlines()
@@ -105,10 +108,11 @@ def domainEnum():
         domain = rootDomains[i]
         domainPath = workingPath + domain + "/"
 
-        if not (os.path.exists(domainPath)):
-            os.makedirs(domainPath)
+        if not (path.exists(domainPath)):
+            makedirs(domainPath)
 
         # Amass Enmurate
+        printLine()
         print(pStatus("GOOD") + "Amass Enmurating Domain: " + domain)
 
         cmd = (
@@ -121,7 +125,7 @@ def domainEnum():
             cmd += " -active"
         if CUSTOM_WORD_LIST:  # If custom wordlist
             cmd += " -w " + CUSTOM_WORD_LIST_PATH
-        system(cmd)
+        # system(cmd)
 
         print(pStatus("GOOD") + "Amass Creating HTML File...")
         system(
@@ -179,6 +183,8 @@ def domainEnum():
     for curDomainFinal in domainListUniq:
         textfile.write(curDomainFinal + "\n")
 
+    print("")
+
     return
 
 
@@ -203,6 +209,9 @@ def flyOver():
     # Location of domain list of previous domain enumertion
     domainList = "Domain_Enum/" + "Domains_Final.txt"
 
+    printLine()
+    print(pStatus("GOOD") + "Aquatone Performing Flyover...")
+
     system(
         "cat "
         + domainList
@@ -224,6 +233,8 @@ def flyOver():
 # This function searchs for CNAME records for possible takeovers
 def takeOver():
     from os import getcwd
+    from os import path
+    from os import makedirs
     from concurrent.futures import ThreadPoolExecutor
     import json
 
@@ -232,8 +243,8 @@ def takeOver():
 
     # Create working path if doesn't exist
     workingPath = getcwd() + "/Take_Over/"
-    if not (os.path.exists(workingPath)):
-        os.makedirs(workingPath)
+    if not (path.exists(workingPath)):
+        makedirs(workingPath)
 
     # Read sub domains from previous enumeration into a list
     with open("Domain_Enum/Domains_Final.txt", "r") as reader:
@@ -247,6 +258,9 @@ def takeOver():
                 "CNAME": None,
             }
         )
+
+    printLine()
+    print(pStatus("GOOD") + "Searching For CNAME Records...")
 
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         results = executor.map(getCNAME, domainList)
@@ -333,22 +347,37 @@ def getCNAME(domain):
 def quickScan():
     from os import getcwd
     from os import system
+    from os import path
+    from os import makedirs
 
     # Settings
-    MAX_THREADS = 100  # Max threads for resolving DNS records
+    LIMIT_BATCH_SIZE = False
+    BATCH_SIZE = 250
 
     # Create working path if doesn't exist
     workingPath = getcwd() + "/Quick_Scan/"
-    if not (os.path.exists(workingPath)):
-        os.makedirs(workingPath)
+    if not (path.exists(workingPath)):
+        makedirs(workingPath)
 
     # Location of domain list of previous domain enumertion
     domainList = "Domain_Enum/" + "Domains_Final.txt"
 
-    cmd = '''rustscan -a '$FILE' --scan-order "Random" '''
-    cmd = cmd.replace("$FILE", domainList)
-    os.system(cmd)
+    # Define command arguments for RustScan
+    if LIMIT_BATCH_SIZE:
+        cmd = """rustscan -a '$FILE' -b $BATCH_SIZE --scan-order "Random" -r 1-65535 -- -A -sC | tee $WORKINGPATH/rustscan_out.txt"""
+        cmd = cmd.replace("$BATCH_SIZE", BATCH_SIZE)
+    else:
+        cmd = """rustscan -a '$FILE' --scan-order "Random" -r 1-65535 -- -A -sC | tee $WORKINGPATH/rustscan_out.txt"""
 
+    cmd = cmd.replace("$FILE", domainList)
+    cmd = cmd.replace("$WORKINGPATH", workingPath)
+
+    # Execute the scan
+    printLine()
+    print(pStatus("GOOD") + "RustScanning All discovered Sub-Domains...")
+    system(cmd)
+
+    return
 
 
 # This function prints banner art for sweet style
@@ -366,6 +395,7 @@ def banner():
                    BY: sonicCrypt0r                                      \   /        
                                                                          \/ \/"""
     print(banner.replace("{VERSION}", VERSION))
+    printLine()
 
     return
 
@@ -430,6 +460,16 @@ def pStatus(status):
         prefix = COLORS["UP"]
 
     return prefix
+
+
+# This function prints a line that goes across the terminal screen
+def printLine():
+    from os import get_terminal_size
+
+    columns, rows = get_terminal_size(0)
+    print("=" * columns)  # Print line
+
+    return
 
 
 # call the main function if not an import
