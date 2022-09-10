@@ -1,10 +1,10 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 # Author: Github: sonicCrypt0r (https://github.com/sonicCrypt0r)
 
 
 # Global variables
-VERSION = "0.03"
+VERSION = "0.033"
 
 
 # This function establishes the general flow of the program
@@ -13,9 +13,10 @@ def main():
     from os import path
     from os import chdir
 
-    banner()  # Prints ASCCI Art Banner For Style
-    checkLinux()  # Check This Is A Linux Operating System
-    # checkPriv()  # Check For Root Privleges
+    banner()        # Prints ASCCI art banner for style
+    checkLinux()    # Check this is a linux operating system
+    checkPriv()     # Check for root privleges
+    checkDepends()  # Check dependencies are installed
     print("")
 
     # Get project name
@@ -31,10 +32,10 @@ def main():
     chdir(projName)
 
     getRootDomains()  # Get root domain names from the user
-    domainEnum()  # Perform sub domain enumartion with Amass
-    flyOver()  # Perform a sub domain screenshot flyover with Aquatone
-    takeOver()  # search for CNAME records for possible takeovers
-    quickScan()  # use RustScan to TCP scan all ports on every subdomain
+    domainEnum()      # Perform sub domain enumartion with Amass
+    flyOver()         # Perform a sub domain screenshot flyover with Aquatone
+    takeOver()        # search for CNAME records for possible takeovers
+    quickScan()       # use Naabu to TCP scan all ports on every subdomain
 
     return
 
@@ -125,7 +126,7 @@ def domainEnum():
             cmd += " -active"
         if CUSTOM_WORD_LIST:  # If custom wordlist
             cmd += " -w " + CUSTOM_WORD_LIST_PATH
-        # system(cmd)
+        system(cmd)
 
         print(pStatus("GOOD") + "Amass Creating HTML File...")
         system(
@@ -343,7 +344,7 @@ def getCNAME(domain):
     return answer
 
 
-# This function uses RustScan to TCP scan all ports on every subdomain
+# This function uses Naabu to TCP scan all ports on every subdomain
 def quickScan():
     from os import getcwd
     from os import system
@@ -351,8 +352,9 @@ def quickScan():
     from os import makedirs
 
     # Settings
-    LIMIT_BATCH_SIZE = False
-    BATCH_SIZE = 250
+    RATE = 1000
+    THREADS = 25
+    NMAP_SPEED = 2
 
     # Create working path if doesn't exist
     workingPath = getcwd() + "/Quick_Scan/"
@@ -362,19 +364,17 @@ def quickScan():
     # Location of domain list of previous domain enumertion
     domainList = "Domain_Enum/" + "Domains_Final.txt"
 
-    # Define command arguments for RustScan
-    if LIMIT_BATCH_SIZE:
-        cmd = """rustscan -a '$FILE' -b $BATCH_SIZE --scan-order "Random" -r 1-65535 -- -A -sC | tee $WORKINGPATH/rustscan_out.txt"""
-        cmd = cmd.replace("$BATCH_SIZE", BATCH_SIZE)
-    else:
-        cmd = """rustscan -a '$FILE' --scan-order "Random" -r 1-65535 -- -A -sC | tee $WORKINGPATH/rustscan_out.txt"""
-
+    # Define command arguments for Naabu
+    cmd = "naabu -p - -list $FILE -rate $RATE -scan-all-ips -c $THREADS -nmap-cli 'nmap -O -T$NMAP_SPEED -sV -oX nmap-output' | tee $WORKINGPATH/quickscan.txt"
+    cmd = cmd.replace("$RATE", str(RATE))
     cmd = cmd.replace("$FILE", domainList)
+    cmd = cmd.replace("$THREADS", str(THREADS))
+    cmd = cmd.replace("$NMAP_SPEED", str(NMAP_SPEED))
     cmd = cmd.replace("$WORKINGPATH", workingPath)
 
     # Execute the scan
     printLine()
-    print(pStatus("GOOD") + "RustScanning All discovered Sub-Domains...")
+    print(pStatus("GOOD") + "Naabu Scanning All discovered Sub-Domains...")
     system(cmd)
 
     return
@@ -395,6 +395,7 @@ def banner():
                    BY: sonicCrypt0r                                      \   /        
                                                                          \/ \/"""
     print(banner.replace("{VERSION}", VERSION))
+    print("")
     printLine()
 
     return
@@ -468,6 +469,46 @@ def printLine():
 
     columns, rows = get_terminal_size(0)
     print("=" * columns)  # Print line
+
+    return
+
+
+# This function checks dependencies and terminates if not found
+def checkDepends():
+    from sys import version_info
+    from shutil import which
+
+    if version_info[0] <= 3 and version_info[1] <= 6:
+        print(
+            pStatus("BAD")
+            + "This Script Was Designed For Python Version 3.6 or Greater"
+        )
+        exit(1)  # Exit With Error Code
+
+    if which("amass") is None:
+        print(pStatus("BAD") + "Your System Is Missing: Amass")
+        exit(1)  # Exit With Error Code
+
+    if which("aquatone") is None:
+        print(pStatus("BAD") + "Your System Is Missing: Aquatone")
+        exit(1)  # Exit With Error Code
+
+    if which("naabu") is None:
+        print(pStatus("BAD") + "Your System Is Missing: Naabu")
+        exit(1)  # Exit With Error Code
+
+    if which("nmap") is None:
+        print(pStatus("BAD") + "Your System Is Missing: Nmap")
+        exit(1)  # Exit With Error Code
+
+    try:
+        import dns.resolver
+
+    except:
+        print(pStatus("BAD") + "Your System Is Missing Python3 Pip 'dns.resolver'")
+        exit(1)  # Exit With Error Code
+
+    print(pStatus("GOOD") + "Checking Dependencies Status: Good")
 
     return
 
