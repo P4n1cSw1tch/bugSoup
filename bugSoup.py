@@ -4,7 +4,7 @@
 
 
 # Global variables
-VERSION = "0.033"
+VERSION = "0.036"
 
 
 # This function establishes the general flow of the program
@@ -35,7 +35,8 @@ def main():
     domainEnum()      # Perform sub domain enumartion with Amass
     flyOver()         # Perform a sub domain screenshot flyover with Aquatone
     takeOver()        # search for CNAME records for possible takeovers
-    quickScan()       # use Naabu to TCP scan all ports on every subdomain
+    nucleiScan()      # use Nuclei to scan all web apps for CVEs
+    #quickScan()       # use Naabu to TCP scan all ports on every subdomain
 
     return
 
@@ -160,9 +161,11 @@ def domainEnum():
             curDomainList = ""
 
         # If Amass was successful or max retries has been hit
-        if curDomainList or MAX_RETRY > 4:
-            if retry > 4:
+        if curDomainList or retry > MAX_RETRY:
+            if retry > MAX_RETRY:
                 retry = 0
+            else:
+                domainList.extend(curDomainList)
             i += 1
 
         # If Amass was not successful and retries < max retries
@@ -177,7 +180,6 @@ def domainEnum():
             rmtree(domainPath)
             sleep(60)
 
-    domainList.extend(curDomainList)
     domainListUniq = list(set(domainList))
 
     textfile = open(workingPath + "Domains_Final.txt", "w")
@@ -303,6 +305,8 @@ def takeOver():
     with open(workingPath + "takeovers.json", "w") as outfile:
         outfile.write(json_object)
 
+    print("")
+
     return
 
 
@@ -330,10 +334,7 @@ def getCNAME(domain):
         answers = my_resolver.resolve(domain, "CNAME")
         for data in answers:
             answer = str(data)
-    except dns.resolver.NoAnswer:
-        print("No CNAME For:", domain)
-        return False
-    except dns.resolver.NXDOMAIN:
+    except:
         print("No CNAME For:", domain)
         return False
 
@@ -372,9 +373,39 @@ def quickScan():
     cmd = cmd.replace("$NMAP_SPEED", str(NMAP_SPEED))
     cmd = cmd.replace("$WORKINGPATH", workingPath)
 
-    # Execute the scan
+    # Let user know starting the scan
     printLine()
     print(pStatus("GOOD") + "Naabu Scanning All discovered Sub-Domains...")
+    
+    # Execute the scan
+    system(cmd)
+
+    return
+
+
+# This function uses Nuclei to CVE scan previously discovered web apps
+def nucleiScan():
+    from os import getcwd
+    from os import system
+    from os import path
+    from os import makedirs
+
+    # Create working path if doesn't exist
+    workingPath = getcwd() + "/Nuclei_Scan/"
+    if not (path.exists(workingPath)):
+        makedirs(workingPath)
+
+    # Location of domain list of previous domain enumertion
+    URLList = "/Fly_Over/aquatone_urls.txt/"
+
+    # Define command arguments for Naabu
+    cmd = "nuclei -tags cve -u $URLLIST | tee $WORKINGPATHnuclei.txt"
+    cmd = cmd.replace("$URLLIST", URLList)
+    cmd = cmd.replace("$WORKINGPATH", workingPath)
+
+    # Execute the scan
+    printLine()
+    print(pStatus("GOOD") + "Nuclei Scanning All discovered web applications...")
     system(cmd)
 
     return
@@ -477,6 +508,9 @@ def printLine():
 def checkDepends():
     from sys import version_info
     from shutil import which
+    from os import path
+
+    apps = ['amass', 'aquatone', 'naabu', 'nmap', 'nuclei', 'tee']
 
     if version_info[0] <= 3 and version_info[1] <= 6:
         print(
@@ -485,20 +519,13 @@ def checkDepends():
         )
         exit(1)  # Exit With Error Code
 
-    if which("amass") is None:
-        print(pStatus("BAD") + "Your System Is Missing: Amass")
-        exit(1)  # Exit With Error Code
+    for app in apps:
+        if which(app) is None:
+            print(pStatus("BAD") + "Your System Is Missing:", app)
+            exit(1)  # Exit With Error Code
 
-    if which("aquatone") is None:
-        print(pStatus("BAD") + "Your System Is Missing: Aquatone")
-        exit(1)  # Exit With Error Code
-
-    if which("naabu") is None:
-        print(pStatus("BAD") + "Your System Is Missing: Naabu")
-        exit(1)  # Exit With Error Code
-
-    if which("nmap") is None:
-        print(pStatus("BAD") + "Your System Is Missing: Nmap")
+    if not(path.exists("/usr/share/seclists/")):
+        print(pStatus("BAD") + "Your System Is Missing: SecLists")
         exit(1)  # Exit With Error Code
 
     try:
